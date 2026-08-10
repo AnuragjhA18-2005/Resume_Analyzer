@@ -1,36 +1,9 @@
+from __future__ import annotations
+
 import json
 
-JOB_DESCRIPTION_TEXT = """
-Job Title: Software Development Engineer I (SDE-1) Intern
-Department: Engineering / Software Development
-Target Candidates: Undergraduate or Postgraduate Students (Computer Science & Related STEM Fields)
-## Position Overview
-The Software Development Engineer (SDE) I Intern will contribute to the design, development, and deployment of scalable, multi-tiered software solutions. Operating within an agile ecosystem, the intern will own a discrete project end-to-end, writing production-ready code that impacts large-scale distributed systems, cloud applications, or customer-facing platforms.
-## Core Responsibilities
 
-* Design, implement, test, and deploy software features for large-scale distributed computing environments.
-* Write clean, stable, highly maintainable, and well-documented code.
-* Define and analyze technical specifications, selecting optimal algorithms and data structures.
-* Collaborate with mentors, tech leads, and product managers to clarify scope and resolve dependencies.
-* Participate actively in technical design reviews, code reviews, and agile sprint ceremonies.
-
-## Mandatory Technical & Academic Qualifications (Hard Filters)
-
-* Education: Current enrollment in a Bachelor’s, Master’s, or Dual Degree program in Computer Science, Computer Engineering, or a highly quantitative STEM discipline.
-* Programming Proficiency: Demonstrated technical capability in at least one object-oriented or general-purpose language (e.g., Java, C++, Python, Go, C#).
-* CS Fundamentals: Academic or practical mastery of core Computer Science principles, including Data Structures (arrays, trees, graphs, hash tables) and Algorithms (sorting, searching, dynamic programming, complexity analysis/Big-O notation).
-* System Design: Foundational understanding of object-oriented analysis and design (OOAD) and software design patterns.
-
-## Preferred Qualifications (Value-Add Signals)
-
-* Practical Experience: Previous technical internships, open-source contributions, or comprehensive capstone software projects.
-* Infrastructure Knowledge: Exposure to cloud computing architectures (AWS ecosystem preferred), RESTful API design, or microservices architecture.
-* Data Management: Working knowledge of relational databases (SQL) or NoSQL data stores.
-* Development Tools: Familiarity with modern development workflows, including Git/version control, CI/CD pipelines, and automated testing frameworks (Unit/Integration testing).
-* Problem-Solving Framework: Strong analytical skills with a proven aptitude for decomposing ambiguous, complex technical requirements into structured components.
-"""
-
-def get_job_extraction_prompts(schema_dict: dict) -> tuple[str, str]:
+def get_job_extraction_prompts(job_description_text: str, schema_dict: dict) -> tuple[str, str]:
     system_prompt = f"""You are an expert HR assistant specializing in structured data extraction.
 
 Your task is to analyze the provided Job Description and extract key structured fields into a clean JSON format.
@@ -53,10 +26,11 @@ Critical Constraints:
     user_prompt = f"""Analyze the following job description and extract the structured information:
 
 <JOB_DESCRIPTION>
-{JOB_DESCRIPTION_TEXT}
+{job_description_text}
 </JOB_DESCRIPTION>
 """
     return system_prompt, user_prompt
+
 
 def get_matcher_prompt(job_json: str, resume_json: str, match_schema_dict: dict) -> str:
     return f"""You are an expert HR recruiter and talent acquisition analyst.
@@ -96,6 +70,7 @@ INPUT DATA:
 {resume_json}
 </CANDIDATE_RESUME>
 """
+
 
 def get_parser_prompts(resume_text: str, resume_schema_dict: dict) -> tuple[str, str]:
     system_prompt = f"""You are a professional, high-fidelity resume parsing system.

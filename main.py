@@ -1,71 +1,59 @@
-import json
-import time
-from pathlib import Path
-from extractors import read_resume
-from parser import get_job_details, parse_resume, final_score
+from fastapi import FastAPI
+from fastapi.openapi.utils import get_openapi
+from fastapi.middleware.cors import CORSMiddleware
 
-def main():
-    print("Initializing Job Description extraction...")
-    job = get_job_details()
-    
-    resume_folder = Path('resumes')
-    all_results = []
-    
-    if not resume_folder.exists():
-        print(f"Directory '{resume_folder}' not found. Please create it and add resumes.")
-        return
-        
-    for file_path in resume_folder.iterdir():
-        if file_path.suffix.lower() not in ['.pdf', '.docx']:
-            continue
-            
-        print(f"\nProcessing candidate: {file_path.name}")
-        try:
-            resume_text = read_resume(file_path)
-            parsed_resume = parse_resume(resume_text)
-            
-            # API Rate Limit mitigation delay
-            time.sleep(5)
-            
-            result = final_score(job, parsed_resume)
-            print(f"Completed match scoring. Score: {result.score}%")
-            
-            # Delay before next resume loop
-            time.sleep(5)
-            
-            all_results.append({
-                'name': parsed_resume.name or file_path.stem,
-                'score': result.score,
-                'details': result.details.model_dump()
-            })
-        except Exception as e:
-            print(f"Failed to process {file_path.name}: {e}")
-            
-    # Sort results in descending order of compatibility score
-    all_results.sort(key=lambda x: x['score'], reverse=True)
-    
-    if all_results:
-        top = all_results[0]
-        bottom = all_results[-1]
-        
-        print("\n" + "="*50)
-        print("TOP CANDIDATE DETAIL")
-        print("="*50)
-        print(f"Name: {top['name']}")
-        print(f"Match Score: {top['score']}%")
-        print("Details:")
-        print(json.dumps(top['details'], indent=4))
-        
-        print("\n" + "="*50)
-        print("BOTTOM CANDIDATE DETAIL")
-        print("="*50)
-        print(f"Name: {bottom['name']}")
-        print(f"Match Score: {bottom['score']}%")
-        print("Details:")
-        print(json.dumps(bottom['details'], indent=4))
-        print("="*50)
-    else:
-        print("\nNo resumes were successfully processed.")
+from api.routes.analyze import router as analyze_router
+from core.config import APP_NAME, APP_VERSION, DEFAULT_CORS_ORIGINS
 
-if __name__ == "__main__":
-    main()
+app = FastAPI(title=APP_NAME, version=APP_VERSION)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=DEFAULT_CORS_ORIGINS or ["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(analyze_router, prefix="/api")
+
+
+@app.get("/health")
+async def health_check() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = get_openapi(
+        title=APP_NAME,
+        version=APP_VERSION,
+        routes=app.routes,
+    )
+
+    analyze_post = openapi_schema.get("paths", {}).get("/api/analyze", {}).get("post", {})
+    request_body = analyze_post.get("requestBody", {})
+    multipart = request_body.get("content", {}).get("multipart/form-data", {})
+    schema_ref = multipart.get("schema", {}).get("$ref")
+
+    if schema_ref:
+        schema_name = schema_ref.rsplit("/", 1)[-1]
+        body_schema = openapi_schema.get("components", {}).get("schemas", {}).get(schema_name)
+        if body_schema and "properties" in body_schema and "files" in body_schema["properties"]:
+            body_schema["properties"]["files"] = {
+                "title": "Files",
+                "type": "array",
+                "description": "Resume files to upload",
+                "items": {
+                    "type": "string",
+                    "format": "binary",
+                },
+            }
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi

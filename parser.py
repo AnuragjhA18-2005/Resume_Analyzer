@@ -1,12 +1,21 @@
 import json
-from config import client, model
-from models import jobDescription, Resume, MatchResult
-from prompts import get_job_extraction_prompts, get_matcher_prompt, get_parser_prompts
 
-def get_job_details() -> jobDescription:
+from core.config import client, model
+from models import JobDescription, MatchResult, Resume
+from services.prompts import get_job_extraction_prompts, get_matcher_prompt, get_parser_prompts
+
+
+def _parse_json_payload(payload: str) -> dict:
+    try:
+        return json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Model returned invalid JSON: {exc}") from exc
+
+
+def get_job_details(job_description_text: str) -> JobDescription:
     """Parses and extracts structured data from the job description template."""
-    schema_dict = jobDescription.model_json_schema()
-    system_p, user_p = get_job_extraction_prompts(schema_dict)
+    schema_dict = JobDescription.model_json_schema()
+    system_p, user_p = get_job_extraction_prompts(job_description_text, schema_dict)
     
     response = client.chat.completions.create(
         model=model,
@@ -16,8 +25,8 @@ def get_job_details() -> jobDescription:
         ],
         response_format={"type": "json_object"}
     )
-    data = json.loads(response.choices[0].message.content)
-    return jobDescription(**data)
+    data = _parse_json_payload(response.choices[0].message.content)
+    return JobDescription(**data)
 
 def parse_resume(resume_text: str) -> Resume:
     """Parses raw resume text into a structured Pydantic Resume model."""
@@ -32,10 +41,11 @@ def parse_resume(resume_text: str) -> Resume:
         ],
         response_format={"type": "json_object"}
     )
-    data = json.loads(response.choices[0].message.content)
+    data = _parse_json_payload(response.choices[0].message.content)
     return Resume(**data)
 
-def final_score(job: jobDescription, resume: Resume) -> MatchResult:
+
+def final_score(job: JobDescription, resume: Resume) -> MatchResult:
     """Matches a parsed resume against a job description, computing a compatibility score."""
     match_schema = MatchResult.model_json_schema()
     prompt_text = get_matcher_prompt(
@@ -51,5 +61,5 @@ def final_score(job: jobDescription, resume: Resume) -> MatchResult:
         ],
         response_format={"type": "json_object"}
     )
-    data = json.loads(response.choices[0].message.content)
+    data = _parse_json_payload(response.choices[0].message.content)
     return MatchResult(**data)

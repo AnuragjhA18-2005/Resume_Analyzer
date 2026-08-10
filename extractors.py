@@ -1,23 +1,46 @@
-import re 
-import pymupdf
-import docx
-import os
+from __future__ import annotations
+
+from io import BytesIO
 from pathlib import Path
-import json
+from typing import BinaryIO
+
+import docx
+import pymupdf
+import re
 from docx.text.paragraph import Paragraph
 from docx.table import Table
 
-def read_pdf(pdf_path: str) -> str:
+
+def _read_source_bytes(source: bytes | str | Path | BinaryIO) -> bytes:
+    if isinstance(source, bytes):
+        return source
+    if isinstance(source, Path):
+        return source.read_bytes()
+    if isinstance(source, str):
+        return Path(source).read_bytes()
+
+    data = source.read()
+    return data if isinstance(data, bytes) else data.encode()
+
+
+def read_pdf(pdf_source: bytes | str | Path | BinaryIO) -> str:
     """Extracts raw text from a PDF file using PyMuPDF with clean spacing and error handling."""
     text_parts = []
     try:
-        with pymupdf.open(pdf_path) as doc:
-            for page in doc:
-                page_text = page.get_text("text")
-                if page_text:
-                    text_parts.append(page_text)
+        if isinstance(pdf_source, (str, Path)):
+            with pymupdf.open(str(pdf_source)) as doc:
+                for page in doc:
+                    page_text = page.get_text("text")
+                    if page_text:
+                        text_parts.append(page_text)
+        else:
+            with pymupdf.open(stream=_read_source_bytes(pdf_source), filetype="pdf") as doc:
+                for page in doc:
+                    page_text = page.get_text("text")
+                    if page_text:
+                        text_parts.append(page_text)
     except Exception as e:
-        print(f"Error reading PDF {pdf_path}: {e}")
+        print(f"Error reading PDF: {e}")
         return ""
     
     # Clean up redundant multiple newlines and spaces
@@ -26,11 +49,14 @@ def read_pdf(pdf_path: str) -> str:
     return cleaned_text.strip()
 
 
-def read_docx(docx_path: str) -> str:
+def read_docx(docx_source: bytes | str | Path | BinaryIO) -> str:
     """Extracts raw text from paragraphs and tables in a DOCX file in document order with robust handling."""
     full_text = []
     try:
-        doc = docx.Document(docx_path)
+        if isinstance(docx_source, (str, Path)):
+            doc = docx.Document(str(docx_source))
+        else:
+            doc = docx.Document(BytesIO(_read_source_bytes(docx_source)))
         for child in doc.element.body:
             if child.tag.endswith('p'):
                 paragraph_text = Paragraph(child, doc).text
@@ -48,18 +74,23 @@ def read_docx(docx_path: str) -> str:
                     if row_text:
                         full_text.append(" | ".join(row_text))
     except Exception as e:
-        print(f"Error reading DOCX {docx_path}: {e}")
+        print(f"Error reading DOCX: {e}")
         return ""
                 
     return "\n".join(full_text)
 
-def read_resume(file_path: Path) -> str:
-    # Ensure file_path is a Path object
-    file_path = Path(file_path)
-    extension = file_path.suffix.lower()
-    if extension == '.pdf':
-        return read_pdf(file_path)
-    elif extension == '.docx':
-        return read_docx(file_path)
+
+def read_resume(file_source: bytes | str | Path | BinaryIO, file_name: str | None = None) -> str:
+    if file_name:
+        extension = Path(file_name).suffix.lower()
+    elif isinstance(file_source, (str, Path)):
+        extension = Path(file_source).suffix.lower()
     else:
-        return 'Incorrect File Format uploaded'
+        extension = ""
+
+    if extension == '.pdf':
+        return read_pdf(file_source)
+    elif extension == '.docx':
+        return read_docx(file_source)
+    else:
+        return ""
