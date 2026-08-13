@@ -51,6 +51,7 @@ class Resume(BaseModel):
 
 class MatchDetails(BaseModel):
     candidate_name: str | None = Field(None, description="Name of the candidate")
+    email: str | None = Field(None, description="Email of the candidate")
     matching_skills: list[str] = Field(default_factory=list, description="Skills matching the job description")
     missing_skills: list[str] = Field(default_factory=list, description="Important skills missing from the candidate's profile")
     experience_requirement_met: bool = Field(description="True if candidate's experience is sufficient, else False")

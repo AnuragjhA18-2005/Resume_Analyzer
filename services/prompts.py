@@ -55,10 +55,11 @@ Critical Constraints & Guidelines:
    - If the resume lists "DSA", "Data Structures", or "Algorithms", then "CS Fundamentals: Data Structures and Algorithms" is MET.
    - If the resume lists "OOP" or "Object Oriented Programming", then "System Design: object-oriented analysis and design" is MET.
 3. "candidate_name": The candidate's name extracted from the resume.
-4. "matching_skills": Skills listed in the resume that correspond to either required or preferred skills in the job description.
-5. "missing_skills": Critical required skills in the job description that are missing from the resume.
-6. "experience_requirement_met": Compare total_experience_years of the resume against the job description's minimum_experience. Set to true if the candidate meets/exceeds it or if no minimum experience is required. Otherwise, set to false.
-7. "verdict": A clear, professional summary justifying the score and suitability.
+4. "email": The candidate's email extracted from the resume.
+5. "matching_skills": Skills listed in the resume that correspond to either required or preferred skills in the job description.
+6. "missing_skills": Critical required skills in the job description that are missing from the resume.
+7. "experience_requirement_met": Compare total_experience_years of the resume against the job description's minimum_experience. Set to true if the candidate meets/exceeds it or if no minimum experience is required. Otherwise, set to false.
+8. "verdict": A clear, professional summary justifying the score and suitability.
 
 INPUT DATA:
 
