@@ -8,8 +8,21 @@ from extractors import read_resume
 from parser import final_score, get_job_details, parse_resume
 from models import MatchResult
 from schemas.resume import ResumeAnalysisResponse, ResumeAnalysisSummary
+from services.llm import GroqQuotaExceeded
 
 from core.config import ALLOWED_UPLOAD_TYPES
+
+
+def _quota_http_exception(exc: GroqQuotaExceeded) -> HTTPException:
+    detail = str(exc)
+    headers: dict[str, str] | None = None
+
+    if exc.retry_after_seconds is not None:
+        retry_after = max(int(round(exc.retry_after_seconds)), 1)
+        headers = {"Retry-After": str(retry_after)}
+        detail = f"{detail} Retry after {retry_after} seconds."
+
+    return HTTPException(status_code=503, detail=detail, headers=headers)
 
 
 async def _process_single_resume(file: UploadFile, job_description) -> MatchResult | None:
@@ -29,11 +42,15 @@ async def _process_single_resume(file: UploadFile, job_description) -> MatchResu
             return None
 
         parsed_resume = await asyncio.to_thread(parse_resume, resume_text)
+    except GroqQuotaExceeded:
+        raise
     except Exception:
         return None
 
     try:
         match_result = await asyncio.to_thread(final_score, job_description, parsed_resume)
+    except GroqQuotaExceeded:
+        raise
     except Exception:
         return None
 
@@ -58,11 +75,17 @@ async def analyze_resumes(job_description_text: str, files: list[UploadFile]) ->
     if not files:
         raise HTTPException(status_code=400, detail="At least one resume file must be uploaded.")
 
-    job_description = await asyncio.to_thread(get_job_details, normalized_job_description)
+    try:
+        job_description = await asyncio.to_thread(get_job_details, normalized_job_description)
+    except GroqQuotaExceeded as exc:
+        raise _quota_http_exception(exc) from exc
 
     results: list[MatchResult] = []
     for file in files:
-        match_result = await _process_single_resume(file, job_description)
+        try:
+            match_result = await _process_single_resume(file, job_description)
+        except GroqQuotaExceeded as exc:
+            raise _quota_http_exception(exc) from exc
         if match_result is not None:
             results.append(match_result)
 
