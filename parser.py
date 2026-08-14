@@ -1,9 +1,11 @@
 import json
+from functools import lru_cache
 
 from core.config import GROQ_MODEL_CANDIDATES
 from models import JobDescription, MatchResult, Resume
-from services.prompts import get_job_extraction_prompts, get_matcher_prompt, get_parser_prompts
+from services.prompts import get_job_extraction_prompts, get_parser_prompts
 from services.llm import complete_json
+from services.scoring import score_match
 
 
 def _parse_json_payload(payload: str) -> dict:
@@ -13,7 +15,8 @@ def _parse_json_payload(payload: str) -> dict:
         raise ValueError(f"Model returned invalid JSON: {exc}") from exc
 
 
-def get_job_details(job_description_text: str) -> JobDescription:
+@lru_cache(maxsize=128)
+def _get_job_details_cached(job_description_text: str, model_candidates: tuple[str, ...]) -> JobDescription:
     """Parses and extracts structured data from the job description template."""
     schema_dict = JobDescription.model_json_schema()
     system_p, user_p = get_job_extraction_prompts(job_description_text, schema_dict)
@@ -29,7 +32,12 @@ def get_job_details(job_description_text: str) -> JobDescription:
     return JobDescription(**data)
 
 
-def parse_resume(resume_text: str) -> Resume:
+def get_job_details(job_description_text: str) -> JobDescription:
+    return _get_job_details_cached(job_description_text, GROQ_MODEL_CANDIDATES).model_copy(deep=True)
+
+
+@lru_cache(maxsize=256)
+def _parse_resume_cached(resume_text: str, model_candidates: tuple[str, ...]) -> Resume:
     """Parses raw resume text into a structured Pydantic Resume model."""
     schema_dict = Resume.model_json_schema()
     system_p, user_p = get_parser_prompts(resume_text, schema_dict)
@@ -45,20 +53,10 @@ def parse_resume(resume_text: str) -> Resume:
     return Resume(**data)
 
 
+def parse_resume(resume_text: str) -> Resume:
+    return _parse_resume_cached(resume_text, GROQ_MODEL_CANDIDATES).model_copy(deep=True)
+
+
 def final_score(job: JobDescription, resume: Resume) -> MatchResult:
     """Matches a parsed resume against a job description, computing a compatibility score."""
-    match_schema = MatchResult.model_json_schema()
-    prompt_text = get_matcher_prompt(
-        job.model_dump_json(indent=2),
-        resume.model_dump_json(indent=2),
-        match_schema
-    )
-
-    content = complete_json(
-        [
-            {"role": "user", "content": prompt_text}
-        ],
-        model_candidates=GROQ_MODEL_CANDIDATES,
-    )
-    data = _parse_json_payload(content)
-    return MatchResult(**data)
+    return score_match(job, resume)
